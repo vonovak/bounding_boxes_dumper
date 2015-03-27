@@ -70,7 +70,7 @@ string createFolderStructure(string dump_path) {
 	static bool DateDirCreated = false;
 	string dt[2];
 	dateTime(dt);
-	string path = expand_user(dump_path) + "/" + dt[0] + "/" + dt[1];
+	string path = expand_user(dump_path);// + "/" + dt[0] + "/" + dt[1]; //the dt array can be used to create a more-fine grained folder structure
 
 	if (DateDirCreated)
 		return path;
