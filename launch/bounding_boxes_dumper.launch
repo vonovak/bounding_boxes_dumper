@@ -4,10 +4,10 @@
     <arg name="camera_namespace" default="/head_xtion" />
     <arg name="upper_body_detector" default="/upper_body_detector/detections" />
     <arg name="odom" default="/odom" />
-    <arg name="rgb_image" default="/rgb/image_raw" />    
-    <arg name="camera_info_depth" default="/depth_registered/camera_info" />
+    <arg name="rgb_image" default="/rgb/image_rect_color" />    
+    <arg name="camera_info_depth" default="/depth/camera_info" />
     <arg name="camera_info_rgb" default="/rgb/camera_info" />
-    <arg name="depth_image" default="/depth_registered/image_rect" />
+    <arg name="depth_image" default="/depth/image_rect_meters" />
     <arg name="dump_path" default="~/bounding_boxes_dump" />
 
     <arg name="machine" default="localhost" />
@@ -27,4 +27,4 @@
         <param name="dump_path" value="$(arg dump_path)" type="string"/>
     </node>
 
-</launch> 
+</launch>

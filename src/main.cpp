@@ -12,6 +12,8 @@
 #include <iostream>
 #include <fstream>
 #include <cv_bridge/cv_bridge.h>
+#include "opencv2/opencv.hpp"
+#include <sensor_msgs/image_encodings.h>
 #include <pwd.h>
 #include "highgui.h"
 #include <ctime>
@@ -29,24 +31,18 @@ using namespace sensor_msgs;
 using namespace nav_msgs;
 using namespace message_filters;
 using namespace upper_body_detector;
+using namespace cv;
 
 
 const string node_name = "bounding_boxes_dumper";
 string path;
 
-inline void dateTime(string dt[2]) {
-	time_t rawtime;
-	struct tm * timeinfo;
-	char buffer[40];
+/*
+ * run to get testing data:
+ * rosbag record /head_xtion/rgb/image_rect_color /upper_body_detector/detections /odom
+ * /head_xtion/depth/image_rect_meters /head_xtion/rgb/camera_info /head_xtion/depth/camera_info
+ */
 
-	time(&rawtime);
-	timeinfo = localtime(&rawtime);
-
-	strftime(buffer, 40, "%d-%m-%Y", timeinfo);
-	dt[0] = buffer;
-	strftime(buffer, 40, "%H:%M:%S", timeinfo);
-	dt[1] = buffer;
-}
 
 std::string expand_user(std::string path) {
   if (not path.empty() and path[0] == '~') {
@@ -68,9 +64,7 @@ std::string expand_user(std::string path) {
 
 string createFolderStructure(string dump_path) {
 	static bool DateDirCreated = false;
-	string dt[2];
-	dateTime(dt);
-	string path = expand_user(dump_path);// + "/" + dt[0] + "/" + dt[1]; //the dt array can be used to create a more-fine grained folder structure
+	string path = expand_user(dump_path);
 
 	if (DateDirCreated)
 		return path;
@@ -82,7 +76,7 @@ string createFolderStructure(string dump_path) {
 	return path;
 }
 
-void saveImg(const ImageConstPtr &img, bool rgb, string fname) {
+void saveRgbImg(const ImageConstPtr &img, string fname) {
 	cv::Mat m;
 
 	try {
@@ -92,10 +86,32 @@ void saveImg(const ImageConstPtr &img, bool rgb, string fname) {
 		return;
 	}
 
-	string suffix = rgb ? "_rgb" : "_depth";
-	string ext = rgb ? ".bmp" : ".pgm";
+	string suffix = "_rgb";
+	string ext = ".bmp";
 	string h = path + "/" + fname + suffix + ext;
 	cv::imwrite(h, m);
+}
+
+void saveDepthImg(const ImageConstPtr &img, string fname) {
+	cv::Mat m;
+
+	//, sensor_msgs::image_encodings::TYPE_16UC1
+	try {
+		m = cv_bridge::toCvShare(img)->image;
+	} catch (cv_bridge::Exception& e) {
+		ROS_ERROR("cv_bridge exception: %s", e.what());
+		return;
+	}
+
+	string suffix = "_depth";
+	string ext = ".yml";
+	string h = path + "/" + fname + suffix + ext;
+
+	FileStorage fs(h, FileStorage::WRITE);
+
+	fs << "depth_matrix" << m;
+
+	fs.release();
 }
 
 void jsonStr(const char* const s, Value& v, Document::AllocatorType& a) {
@@ -214,10 +230,15 @@ void saveOdomAndDetections(const Odometry::ConstPtr &odom, const upper_body_dete
 	for (int i = 0; i < ubd->height.size(); i++)
 		detectionsh.PushBack(ubd->height[i], a);
 
+	Value detectionsmd(kArrayType);
+	for (int i = 0; i < ubd->median_depth.size(); i++)
+		detectionsmd.PushBack(ubd->median_depth[i], a);
+
 	d.AddMember("pos_x", detectionsx, a);
 	d.AddMember("pos_y", detectionsy, a);
 	d.AddMember("width", detectionsw, a);
 	d.AddMember("height", detectionsh, a);
+	d.AddMember("median_depth", detectionsmd, a);
 
 	//ubd message done
 
@@ -235,8 +256,8 @@ void callback(const ImageConstPtr &depth, const ImageConstPtr &color,
 	string fname = stream.str();
         //cout<<"will be saving stuff to path "<<path<<" and file name "<<fname<<endl;
 
-	saveImg(color, true, fname);
-	saveImg(depth, false, fname);
+	saveRgbImg(color, fname);
+	saveDepthImg(depth, fname);
 	saveOdomAndDetections(odom, ubd, fname + "_odom_detect");
 }
 
@@ -358,16 +379,16 @@ int main(int argc, char **argv) {
 	private_node_handle_.param("dump_path", dump_path, string("~/bounding_boxes_dump"));
 
 	string topic_color_image;
-	private_node_handle_.param("rgb_image", topic_color_image, string("/rgb/image_raw"));
+	private_node_handle_.param("rgb_image", topic_color_image, string("/rgb/image_rect_color"));
 	topic_color_image = cam_ns + topic_color_image;
 	string topic_camera_info_depth;
-	private_node_handle_.param("camera_info_depth", topic_camera_info_depth, string("/depth_registered/camera_info"));
+	private_node_handle_.param("camera_info_depth", topic_camera_info_depth, string("/depth/camera_info"));
 	topic_camera_info_depth = cam_ns + topic_camera_info_depth;
 	string topic_camera_info_rgb;
 	private_node_handle_.param("camera_info_rgb", topic_camera_info_rgb, string("/rgb/camera_info"));
 	topic_camera_info_rgb = cam_ns + topic_camera_info_rgb;
 	string topic_depth_image;
-	private_node_handle_.param("depth_image", topic_depth_image, string("/depth_registered/image_rect"));
+	private_node_handle_.param("depth_image", topic_depth_image, string("/depth/image_rect_meters"));
 	topic_depth_image = cam_ns + topic_depth_image;
 	//private_node_handle_.param("pretty_json", pretty_json_print, false);
 
